@@ -391,8 +391,9 @@ void _printUsage(ArgParser parser) {
   print('  cursor_chat_tool --tui              # Open TUI browser');
   print('  cursor_chat_tool 1234abcd           # Extract chat with ID 1234abcd to current directory');
   print('  cursor_chat_tool --extract=all      # Extract all chats to ./output folder');
-  print('  cursor_chat_tool --extract=all -f json -o ./exports  # Extract all chats as JSON to ./exports folder');
-  print('  cursor_chat_tool --show-empty       # Include empty chats in listings');
+  print('  cursor_chat_tool -e=all             # Same as above, using shorthand notation');
+  print('  cursor_chat_tool -e=all -f markdown # Extract all chats as markdown files');
+  print('  cursor_chat_tool -e=all -f json -o ./exports  # Extract all chats as JSON to ./exports folder');
 }
 
 String _formatChat(Chat chat, String format) {

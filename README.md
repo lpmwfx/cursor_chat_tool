@@ -80,6 +80,11 @@ Extract all chats to a specific directory:
 cursor_chat_tool --extract=all --format=json --output=./exports
 ```
 
+Du kan også bruge kortere flag-syntaks:
+```bash
+cursor_chat_tool -e=all -f json -o ./exports
+```
+
 ## Command-line Parameters
 
 ```
@@ -107,7 +112,9 @@ Examples:
   cursor_chat_tool --tui              # Open the TUI browser
   cursor_chat_tool 1234abcd           # Extract chat with ID 1234abcd to current directory
   cursor_chat_tool --extract=all      # Extract all chats to ./output folder
-  cursor_chat_tool --extract=all -f json -o ./exports  # Extract all chats as JSON to ./exports folder
+  cursor_chat_tool -e=all             # Same as above, using shorthand notation
+  cursor_chat_tool -e=all -f markdown # Extract all chats as markdown files
+  cursor_chat_tool -e=all -f json -o ./exports  # Extract all chats as JSON to ./exports folder
 ```
 
 ## VSCode Integration
