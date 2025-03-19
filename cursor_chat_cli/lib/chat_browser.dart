@@ -98,6 +98,46 @@ class ChatBrowser {
     return allChats;
   }
 
+  /// Finder en chat ud fra dens request ID
+  Future<Chat?> findChatByRequestId(String requestId) async {
+    final allChats = await loadAllChats();
+    
+    // Find chat with matching requestId
+    for (final chat in allChats) {
+      if (chat.id == requestId || chat.id.contains(requestId) || 
+          (chat.requestId.isNotEmpty && (chat.requestId == requestId || chat.requestId.contains(requestId)))) {
+        return chat;
+      }
+    }
+    
+    return null;
+  }
+
+  /// Henter en chat ved ID eller index
+  Future<Chat?> getChat(String chatId) async {
+    final allChats = await loadAllChats();
+    
+    // Parse chatId as integer index
+    int? index = int.tryParse(chatId);
+    if (index != null) {
+      if (index < 1 || index > allChats.length) {
+        print('Invalid chat index: $index (should be between 1 and ${allChats.length})');
+        return null;
+      }
+      
+      return allChats[index - 1];
+    }
+    
+    // Try to match by chat id
+    final chat = allChats.firstWhereOrNull((c) => c.id == chatId || c.id.contains(chatId));
+    if (chat != null) {
+      return chat;
+    }
+    
+    // Try to match by request id
+    return await findChatByRequestId(chatId);
+  }
+
   /// Shows a list of all chats in the console
   Future<void> listChats() async {
     _chats = await _loadChats();
@@ -127,35 +167,6 @@ class ChatBrowser {
     
     print('');
     print('Found ${_chats.length} chat histories');
-  }
-
-  /// Retrieves a specific chat by ID
-  Future<Chat?> getChat(String chatId) async {
-    if (_chats.isEmpty) {
-      _chats = await _loadChats();
-    }
-
-    // Try to parse chatId as an index
-    final index = int.tryParse(chatId);
-    if (index != null && index > 0 && index <= _chats.length) {
-      final chat = _chats[index - 1];
-      // Double-check that the chat is valid
-      if (Chat.isValidChat(chat)) {
-        return chat;
-      } else {
-        print('Chat with index $index is not valid');
-        return null;
-      }
-    }
-
-    // Otherwise search for matching ID
-    final chat = _chats.firstWhereOrNull((chat) => chat.id == chatId);
-    if (chat != null && Chat.isValidChat(chat)) {
-      return chat;
-    }
-    
-    print('Could not find valid chat with ID: $chatId');
-    return null;
   }
 
   /// Shows Text User Interface (TUI) to browse and view chats
