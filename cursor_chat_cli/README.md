@@ -1,5 +1,6 @@
 # Cursor Chat Tools
 
+
 This repository contains a collection of tools for working with the Cursor AI IDE, including command-line utilities and a text-based user interface for browsing and extracting chat histories.
 
 ## Overview
