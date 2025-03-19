@@ -203,3 +203,78 @@ class ChatExtractor {
         .replaceAll("'", '&#39;');
   }
 }
+
+String formatTimestamp(int millisecondsSinceEpoch) {
+  // Konverter millisekunder til DateTime
+  final dateTime = DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch);
+  
+  // Formatter til læsbart dansk-venligt format
+  final year = dateTime.year;
+  final month = dateTime.month.toString().padLeft(2, '0');
+  final day = dateTime.day.toString().padLeft(2, '0');
+  final hour = dateTime.hour.toString().padLeft(2, '0');
+  final minute = dateTime.minute.toString().padLeft(2, '0');
+  final second = dateTime.second.toString().padLeft(2, '0');
+  
+  return '$day-$month-$year $hour:$minute:$second';
+}
+
+String exportChatToJson(Chat chat) {
+  // ... existing code ...
+  
+  // Opdater timestamp visning hvis det er påkrævet
+  // Enten under konvertering til JSON eller når du skaber message maps
+  
+  // ... existing code ...
+}
+
+String exportChatToMarkdown(Chat chat) {
+  final buffer = StringBuffer();
+  buffer.writeln('# ${chat.title}\n');
+  
+  for (final message in chat.messages) {
+    // Brug formatTimestamp funktionen til korrekt datovisning
+    final formattedTime = message.timestamp != null ? 
+      formatTimestamp(message.timestamp!) : 'Ukendt tidspunkt';
+    
+    buffer.writeln('## ${message.role} ($formattedTime)');
+    buffer.writeln();
+    buffer.writeln('${message.content}');
+    buffer.writeln();
+  }
+  
+  return buffer.toString();
+}
+
+String exportChatToHtml(Chat chat) {
+  final buffer = StringBuffer();
+  // ... existing HTML header code ...
+  
+  for (final message in chat.messages) {
+    // Brug formatTimestamp funktionen til korrekt datovisning
+    final formattedTime = message.timestamp != null ? 
+      formatTimestamp(message.timestamp!) : 'Ukendt tidspunkt';
+    
+    // ... existing HTML formatting with updated timestamp ...
+  }
+  
+  // ... existing HTML footer code ...
+  return buffer.toString();
+}
+
+String exportChatToText(Chat chat) {
+  final buffer = StringBuffer();
+  buffer.writeln('Titel: ${chat.title}\n');
+  
+  for (final message in chat.messages) {
+    // Brug formatTimestamp funktionen til korrekt datovisning
+    final formattedTime = message.timestamp != null ? 
+      formatTimestamp(message.timestamp!) : 'Ukendt tidspunkt';
+    
+    buffer.writeln('${message.role.toUpperCase()} ($formattedTime):');
+    buffer.writeln('${message.content}');
+    buffer.writeln('---\n');
+  }
+  
+  return buffer.toString();
+}
