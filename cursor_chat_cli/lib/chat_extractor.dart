@@ -4,12 +4,13 @@ import 'package:path/path.dart' as path;
 import 'config.dart';
 import 'chat_model.dart';
 import 'chat_browser.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 /// Formaterer tidsstempel til læsbart dansk-venligt format
 String formatTimestamp(int millisecondsSinceEpoch) {
   // Konverter millisekunder til DateTime
   final dateTime = DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch);
-  
+
   // Formatter til læsbart dansk-venligt format
   final year = dateTime.year;
   final month = dateTime.month.toString().padLeft(2, '0');
@@ -17,7 +18,7 @@ String formatTimestamp(int millisecondsSinceEpoch) {
   final hour = dateTime.hour.toString().padLeft(2, '0');
   final minute = dateTime.minute.toString().padLeft(2, '0');
   final second = dateTime.second.toString().padLeft(2, '0');
-  
+
   return '$day-$month-$year $hour:$minute:$second';
 }
 
@@ -43,14 +44,14 @@ String escapeHtml(String text) {
 /// Hjælpefunktion til at sanitize filnavne
 String sanitizeFilename(String input) {
   if (input.isEmpty) return 'untitled';
-  
+
   // Limit length
   var sanitized = input.length > 50 ? input.substring(0, 50) : input;
-  
+
   // Replace invalid filename characters
   sanitized = sanitized.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
   sanitized = sanitized.replaceAll(RegExp(r'\s+'), '_');
-  
+
   return sanitized;
 }
 
@@ -58,79 +59,131 @@ String sanitizeFilename(String input) {
 class ChatExtractor {
   final Config config;
   final ChatBrowser browser;
+  bool _verbose = false;
 
-  ChatExtractor(this.config) : browser = ChatBrowser(config);
+  ChatExtractor(this.config, {bool verbose = false})
+      : browser = ChatBrowser(config, verbose: verbose) {
+    _verbose = verbose;
+  }
 
-  /// Udtræk en specifik chat eller alle chats
-  Future<void> extract(String chatId, String outputPath, String format, {String? customPath}) async {
-    List<Chat> chats = [];
-
-    if (chatId.toLowerCase() == 'alle' || chatId.toLowerCase() == 'all') {
-      // Hent alle chats ved at kalde den offentlige metode
-      chats = await browser.loadAllChats();
-    } else {
-      // Hent specifik chat med den offentlige metode
-      final chat = await browser.getChat(chatId);
-      if (chat != null) {
-        chats = [chat];
-      }
-    }
-
-    if (chats.isEmpty) {
-      print('Ingen chats fundet til udtrækning.');
-      return;
-    }
-
-    // Sikr at output-mappen eksisterer
-    ensureDirectoryExists(outputPath);
-
-    int skippedCount = 0;
-    int successCount = 0;
-
-    for (final chat in chats) {
-      // Skip chats without messages
-      if (chat.messages.isEmpty) {
-        skippedCount++;
-        continue;
-      }
-
-      String outputFilePath;
-      if (customPath != null) {
-        // Hvis der er angivet en specifik sti, brug den
-        final dirName = path.dirname(customPath);
-        ensureDirectoryExists(dirName);
-        
-        final extension = getExtensionForFormat(format);
-        outputFilePath = '$customPath$extension';
-      } else {
-        // Ellers brug standard sti-generering
-        final filename = '${sanitizeFilename(chat.title)}_${chat.id}';
-        final extension = getExtensionForFormat(format);
-        outputFilePath = path.join(outputPath, '$filename$extension');
-      }
-
-      final content = formatChat(chat, format);
-      File(outputFilePath).writeAsStringSync(content);
-      
-      print('Chat udtrukket til: ${path.basename(outputFilePath)}');
-      successCount++;
-    }
-
-    print('Udtrækning fuldført! $successCount chat(s) udtrukket til $outputPath');
-    if (skippedCount > 0) {
-      print('Sprang $skippedCount tomme chats over (ingen beskeder)');
+  void _debug(String message) {
+    if (_verbose) {
+      print("Debug: $message");
     }
   }
 
+  /// Udtræk en specifik chat eller alle chats
+  Future<void> extract(String chatId, String outputPath, String format,
+      {String? customPath}) async {
+    print("Henter chats...");
+
+    // Prøv en anden tilgang til at hente chats
+    final storageDir = Directory(config.workspaceStoragePath);
+    if (!storageDir.existsSync()) {
+      print(
+          'Warning: Workspace storage folder ikke fundet: ${config.workspaceStoragePath}');
+      return;
+    }
+
+    print("Bearbejder chat-mapper direkte...");
+    final allChats = <Chat>[];
+
+    try {
+      await for (final entity in storageDir.list()) {
+        if (entity is Directory) {
+          final dbFile = File(path.join(entity.path, 'state.vscdb'));
+
+          if (dbFile.existsSync()) {
+            try {
+              final db = sqlite3.open(dbFile.path);
+
+              final result = db.select(
+                  "SELECT rowid, [key], value FROM ItemTable WHERE [key] IN "
+                  "('aiService.prompts', 'workbench.panel.aichat.view.aichat.chatdata')");
+
+              for (final row in result) {
+                final rowId = row['rowid'] as int;
+                final key = row['key'] as String;
+                final value = row['value'] as String;
+
+                final chatId =
+                    '${entity.path.split(Platform.pathSeparator).last}_$rowId';
+                final chat = Chat.fromSqliteValue(chatId, value);
+
+                if (chat != null && chat.messages.isNotEmpty) {
+                  allChats.add(chat);
+                  print(
+                      "DEBUG: Tilføjede chat med ID ${chat.id}, ${chat.messages.length} beskeder");
+                }
+              }
+
+              db.dispose();
+            } catch (e) {
+              print('ERROR: Kunne ikke læse databasen ${dbFile.path}: $e');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('ERROR ved læsning af chats: $e');
+    }
+
+    print("DEBUG: Fandt ${allChats.length} chats direkte");
+
+    if (allChats.isEmpty) {
+      print('Ingen chats fundet overhovedet.');
+      return;
+    }
+
+    // Sortér chats efter dato, nyeste først
+    allChats.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+
+    // Sikr at output-mappen eksisterer
+    ensureDirectoryExists(outputPath);
+    print("Oprettede/sikrede outputmappen: $outputPath");
+
+    print("Begynder udtrækning af ${allChats.length} chats...");
+    int successCount = 0;
+
+    for (final chat in allChats) {
+      try {
+        String outputFilePath;
+        if (customPath != null) {
+          final dirName = path.dirname(customPath);
+          ensureDirectoryExists(dirName);
+
+          final extension = getExtensionForFormat(format);
+          outputFilePath = '$customPath$extension';
+        } else {
+          final filename = '${sanitizeFilename(chat.title)}_${chat.id}';
+          final extension = getExtensionForFormat(format);
+          outputFilePath = path.join(outputPath, '$filename$extension');
+        }
+
+        final content = formatChat(chat, format);
+        File(outputFilePath).writeAsStringSync(content);
+
+        print('Chat udtrukket til: ${path.basename(outputFilePath)}');
+        successCount++;
+      } catch (e) {
+        print('Fejl under udtrækning af chat ${chat.id}: $e');
+      }
+    }
+
+    print(
+        'Udtrækning fuldført! $successCount chat(s) udtrukket til $outputPath');
+  }
+
   /// Udtræk chat med specifik request ID og gem som JSON
-  Future<void> extractWithRequestId(String requestId, String outputDir, {String? customFilename}) async {
+  Future<void> extractWithRequestId(String requestId, String outputDir,
+      {String? customFilename}) async {
     final chat = await browser.findChatByRequestId(requestId);
-    
+
     if (chat == null) {
       print('Ingen chat fundet med request ID: $requestId');
       return;
     }
-    
+
     String outputFile;
     if (customFilename != null) {
       // Hvis der er angivet et specifikt filnavn, brug det
@@ -142,24 +195,32 @@ class ChatExtractor {
       final sanitizedTitle = sanitizeFilename(chat.title);
       outputFile = path.join(outputDir, '$sanitizedTitle-${chat.id}.json');
     }
-    
+
     // Sikr at output-mappen eksisterer
     ensureDirectoryExists(path.dirname(outputFile));
-    
-    // Eksporter chat som JSON
-    final jsonContent = JsonEncoder.withIndent('  ').convert({
-      'id': chat.id,
-      'title': chat.title,
-      'requestId': chat.requestId,
-      'messages': chat.messages.map((msg) => {
-        'role': msg.role,
-        'content': msg.content,
-        'timestamp': msg.timestamp.millisecondsSinceEpoch
-      }).toList()
-    });
-    
-    File(outputFile).writeAsStringSync(jsonContent);
-    print('Chat med request ID "${chat.id}" gemt som ${path.basename(outputFile)}');
+
+    try {
+      // Eksporter chat som JSON
+      final jsonContent = JsonEncoder.withIndent('  ').convert({
+        'id': chat.id,
+        'title': chat.title,
+        'requestId': chat.requestId,
+        'messages': chat.messages
+            .map((msg) => {
+                  'role': msg.role,
+                  'content': msg.content,
+                  'timestamp': msg.timestamp.millisecondsSinceEpoch
+                })
+            .toList()
+      });
+
+      File(outputFile).writeAsStringSync(jsonContent);
+      print(
+          'Chat med request ID "${chat.id}" gemt som ${path.basename(outputFile)}');
+    } catch (e) {
+      _debug('Fejl ved eksport af chat: $e');
+      print('Kunne ikke gemme chat (se verbose output for detaljer)');
+    }
   }
 
   /// Formatterer chat til det ønskede output format
@@ -184,11 +245,13 @@ class ChatExtractor {
       'id': chat.id,
       'title': chat.title,
       'requestId': chat.requestId,
-      'messages': chat.messages.map((msg) => {
-        'role': msg.role,
-        'content': msg.content,
-        'timestamp': msg.timestamp.millisecondsSinceEpoch
-      }).toList()
+      'messages': chat.messages
+          .map((msg) => {
+                'role': msg.role,
+                'content': msg.content,
+                'timestamp': msg.timestamp.millisecondsSinceEpoch
+              })
+          .toList()
     };
     return JsonEncoder.withIndent('  ').convert(jsonMap);
   }
@@ -205,7 +268,8 @@ class ChatExtractor {
 
     for (final message in chat.messages) {
       // Brug formatTimestamp funktionen til korrekt datovisning
-      final formattedTime = formatTimestamp(message.timestamp.millisecondsSinceEpoch);
+      final formattedTime =
+          formatTimestamp(message.timestamp.millisecondsSinceEpoch);
       buffer.writeln('[${message.role} - $formattedTime]');
       buffer.writeln(message.content);
       buffer.writeln('');
@@ -227,7 +291,8 @@ class ChatExtractor {
 
     for (final message in chat.messages) {
       // Brug formatTimestamp funktionen til korrekt datovisning
-      final formattedTime = formatTimestamp(message.timestamp.millisecondsSinceEpoch);
+      final formattedTime =
+          formatTimestamp(message.timestamp.millisecondsSinceEpoch);
       buffer.writeln('## ${message.role} ($formattedTime)');
       buffer.writeln('');
       buffer.writeln(message.content);
@@ -271,13 +336,16 @@ class ChatExtractor {
 
     for (final message in chat.messages) {
       // Brug formatTimestamp funktionen til korrekt datovisning
-      final formattedTime = formatTimestamp(message.timestamp.millisecondsSinceEpoch);
+      final formattedTime =
+          formatTimestamp(message.timestamp.millisecondsSinceEpoch);
       final cssClass = message.role == 'user' ? 'user' : 'assistant';
 
       buffer.writeln('  <div class="message $cssClass">');
-      buffer.writeln('    <div class="timestamp">Tidspunkt: $formattedTime</div>');
+      buffer.writeln(
+          '    <div class="timestamp">Tidspunkt: $formattedTime</div>');
       buffer.writeln('    <div class="role">${escapeHtml(message.role)}</div>');
-      buffer.writeln('    <div class="content">${escapeHtml(message.content)}</div>');
+      buffer.writeln(
+          '    <div class="content">${escapeHtml(message.content)}</div>');
       buffer.writeln('  </div>');
     }
 

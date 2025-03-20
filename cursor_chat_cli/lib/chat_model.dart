@@ -75,13 +75,13 @@ class Chat {
   String toMarkdown() {
     final buffer = StringBuffer();
     buffer.writeln('# $title\n');
-    
+
     for (var message in messages) {
       buffer.writeln('## ${message.role}');
       buffer.writeln(message.content);
       buffer.writeln();
     }
-    
+
     return buffer.toString();
   }
 
@@ -92,24 +92,26 @@ class Chat {
     buffer.writeln('<head>');
     buffer.writeln('<title>$title</title>');
     buffer.writeln('<style>');
-    buffer.writeln('body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }');
+    buffer.writeln(
+        'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }');
     buffer.writeln('h1 { color: #333; }');
     buffer.writeln('h2 { color: #666; margin-top: 20px; }');
-    buffer.writeln('pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }');
+    buffer.writeln(
+        'pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; }');
     buffer.writeln('code { font-family: "SF Mono", "Consolas", monospace; }');
     buffer.writeln('</style>');
     buffer.writeln('</head>');
     buffer.writeln('<body>');
     buffer.writeln('<h1>$title</h1>');
-    
+
     for (var message in messages) {
       buffer.writeln('<h2>${message.role}</h2>');
       buffer.writeln('<div>${message.content}</div>');
     }
-    
+
     buffer.writeln('</body>');
     buffer.writeln('</html>');
-    
+
     return buffer.toString();
   }
 
@@ -119,13 +121,13 @@ class Chat {
     buffer.writeln('Chat: $title');
     buffer.writeln('ID: $id');
     buffer.writeln('Antal beskeder: ${messages.length}\n');
-    
+
     for (var message in messages) {
       buffer.writeln('${message.role}:');
       buffer.writeln(message.content);
       buffer.writeln();
     }
-    
+
     return buffer.toString();
   }
 
@@ -139,32 +141,51 @@ class Chat {
         // Tjek for requestId direkte i data
         if (data.containsKey('requestId')) {
           extractedRequestId = data['requestId'].toString();
-        } 
+        }
         // Tjek for requestId i metadata
         else if (data.containsKey('metadata') && data['metadata'] is Map) {
           final metadata = data['metadata'] as Map;
           if (metadata.containsKey('requestId')) {
             extractedRequestId = metadata['requestId'].toString();
           }
-        } 
+        }
         // Tjek for requestId i conversation
-        else if (data.containsKey('conversation') && data['conversation'] is Map) {
+        else if (data.containsKey('conversation') &&
+            data['conversation'] is Map) {
           final conversation = data['conversation'] as Map;
           if (conversation.containsKey('requestId')) {
             extractedRequestId = conversation['requestId'].toString();
           }
         }
-        
+
         // Prøv at finde UUID format i ID eller andre steder
         if (extractedRequestId.isEmpty) {
-          final uuidRegex = RegExp(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', caseSensitive: false);
-          final longHashRegex = RegExp(r'[a-f0-9_-]{30,}', caseSensitive: false);
-          
+          final uuidRegex = RegExp(
+              r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
+              caseSensitive: false);
+          final longHashRegex =
+              RegExp(r'[a-f0-9_-]{30,}', caseSensitive: false);
+
           // Tjek ID
           if (uuidRegex.hasMatch(chatId)) {
             extractedRequestId = uuidRegex.firstMatch(chatId)!.group(0)!;
           } else if (longHashRegex.hasMatch(chatId)) {
             extractedRequestId = longHashRegex.firstMatch(chatId)!.group(0)!;
+          }
+
+          // Søg også i value for UUID
+          if (extractedRequestId.isEmpty) {
+            if (uuidRegex.hasMatch(jsonValue)) {
+              extractedRequestId = uuidRegex.firstMatch(jsonValue)!.group(0)!;
+            }
+          }
+
+          // Søg også efter formateret UUID i hele data strukturen
+          if (extractedRequestId.isEmpty && data is Map) {
+            String jsonString = jsonEncode(data);
+            if (uuidRegex.hasMatch(jsonString)) {
+              extractedRequestId = uuidRegex.firstMatch(jsonString)!.group(0)!;
+            }
           }
         }
       }
@@ -173,15 +194,19 @@ class Chat {
       if (data is List) {
         // Hvis det er et array, antag at det er beskeder
         final messages = <ChatMessage>[];
-        
+
         for (var msgJson in data) {
           if (msgJson is Map<String, dynamic>) {
             messages.add(ChatMessage(
               content: msgJson['text'] ?? msgJson['content'] ?? '',
-              role: msgJson['role'] ?? (msgJson['isUser'] == true ? 'user' : 'assistant'),
+              role: msgJson['role'] ??
+                  (msgJson['isUser'] == true ? 'user' : 'assistant'),
               timestamp: msgJson['timestamp'] != null
-                ? DateTime.fromMillisecondsSinceEpoch(msgJson['timestamp'] as int)
-                : (msgJson['date'] != null ? DateTime.parse(msgJson['date']) : DateTime.now()),
+                  ? DateTime.fromMillisecondsSinceEpoch(
+                      msgJson['timestamp'] as int)
+                  : (msgJson['date'] != null
+                      ? DateTime.parse(msgJson['date'])
+                      : DateTime.now()),
             ));
           }
         }
@@ -202,15 +227,19 @@ class Chat {
           // Antagelse: { messages: [...] }
           final List<dynamic> messagesJson = data['messages'] ?? [];
           final messages = <ChatMessage>[];
-          
+
           for (var msgJson in messagesJson) {
             if (msgJson is Map<String, dynamic>) {
               messages.add(ChatMessage(
                 content: msgJson['text'] ?? msgJson['content'] ?? '',
-                role: msgJson['role'] ?? (msgJson['isUser'] == true ? 'user' : 'assistant'),
+                role: msgJson['role'] ??
+                    (msgJson['isUser'] == true ? 'user' : 'assistant'),
                 timestamp: msgJson['timestamp'] != null
-                  ? DateTime.fromMillisecondsSinceEpoch(msgJson['timestamp'] as int)
-                  : (msgJson['date'] != null ? DateTime.parse(msgJson['date']) : DateTime.now()),
+                    ? DateTime.fromMillisecondsSinceEpoch(
+                        msgJson['timestamp'] as int)
+                    : (msgJson['date'] != null
+                        ? DateTime.parse(msgJson['date'])
+                        : DateTime.now()),
               ));
             }
           }
@@ -234,15 +263,19 @@ class Chat {
             final List<dynamic> messagesJson = sessionData['messages'] ?? [];
 
             final messages = <ChatMessage>[];
-            
+
             for (var msgJson in messagesJson) {
               if (msgJson is Map<String, dynamic>) {
                 messages.add(ChatMessage(
                   content: msgJson['text'] ?? msgJson['content'] ?? '',
-                  role: msgJson['role'] ?? (msgJson['isUser'] == true ? 'user' : 'assistant'),
+                  role: msgJson['role'] ??
+                      (msgJson['isUser'] == true ? 'user' : 'assistant'),
                   timestamp: msgJson['timestamp'] != null
-                    ? DateTime.fromMillisecondsSinceEpoch(msgJson['timestamp'] as int)
-                    : (msgJson['date'] != null ? DateTime.parse(msgJson['date']) : DateTime.now()),
+                      ? DateTime.fromMillisecondsSinceEpoch(
+                          msgJson['timestamp'] as int)
+                      : (msgJson['date'] != null
+                          ? DateTime.parse(msgJson['date'])
+                          : DateTime.now()),
                 ));
               }
             }
@@ -267,15 +300,19 @@ class Chat {
             final List<dynamic> messagesJson = chatData['messages'] ?? [];
 
             final messages = <ChatMessage>[];
-            
+
             for (var msgJson in messagesJson) {
               if (msgJson is Map<String, dynamic>) {
                 messages.add(ChatMessage(
                   content: msgJson['text'] ?? msgJson['content'] ?? '',
-                  role: msgJson['role'] ?? (msgJson['isUser'] == true ? 'user' : 'assistant'),
+                  role: msgJson['role'] ??
+                      (msgJson['isUser'] == true ? 'user' : 'assistant'),
                   timestamp: msgJson['timestamp'] != null
-                    ? DateTime.fromMillisecondsSinceEpoch(msgJson['timestamp'] as int)
-                    : (msgJson['date'] != null ? DateTime.parse(msgJson['date']) : DateTime.now()),
+                      ? DateTime.fromMillisecondsSinceEpoch(
+                          msgJson['timestamp'] as int)
+                      : (msgJson['date'] != null
+                          ? DateTime.parse(msgJson['date'])
+                          : DateTime.now()),
                 ));
               }
             }
@@ -298,15 +335,19 @@ class Chat {
           if (chatData != null && chatData.containsKey('messages')) {
             final List<dynamic> messagesJson = chatData['messages'] ?? [];
             final messages = <ChatMessage>[];
-            
+
             for (var msgJson in messagesJson) {
               if (msgJson is Map<String, dynamic>) {
                 messages.add(ChatMessage(
                   content: msgJson['text'] ?? msgJson['content'] ?? '',
-                  role: msgJson['role'] ?? (msgJson['isUser'] == true ? 'user' : 'assistant'),
+                  role: msgJson['role'] ??
+                      (msgJson['isUser'] == true ? 'user' : 'assistant'),
                   timestamp: msgJson['timestamp'] != null
-                    ? DateTime.fromMillisecondsSinceEpoch(msgJson['timestamp'] as int)
-                    : (msgJson['date'] != null ? DateTime.parse(msgJson['date']) : DateTime.now()),
+                      ? DateTime.fromMillisecondsSinceEpoch(
+                          msgJson['timestamp'] as int)
+                      : (msgJson['date'] != null
+                          ? DateTime.parse(msgJson['date'])
+                          : DateTime.now()),
                 ));
               }
             }
@@ -329,8 +370,8 @@ class Chat {
       // Hvis vi ikke kunne genkende formatet
       return null;
     } catch (e) {
-      print('Fejl ved parsing af chat data: $e');
-      return null;
+      // Kast fejlen videre i stedet for at udskrive den direkte
+      throw FormatException('Kunne ikke parse chat data: $e');
     }
   }
 
@@ -344,10 +385,9 @@ class Chat {
     return truncated.replaceAll('\n', ' ').trim();
   }
 
-  /// Determines if a chat is valid based on criteria
-  /// A chat is considered valid if it contains at least one message
-  /// Empty chats (no messages) are considered invalid and will be skipped
+  /// Returns true if the chat is valid
   static bool isValidChat(Chat chat) {
+    // Chat er gyldig hvis den har mindst én besked
     return chat.messages.isNotEmpty;
   }
 

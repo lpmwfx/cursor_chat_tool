@@ -75,7 +75,12 @@ This will save the chat as a JSON file in the current directory.
 
 ### Extract Multiple Chats
 
-Extract all chats to a specific directory:
+Extract all chats to the default directory:
+```bash
+cursor_chat_tool --extract=all
+```
+
+Du kan også angive et specifikt format og outputmappe:
 ```bash
 cursor_chat_tool --extract=all --format=json --output=./exports
 ```
@@ -101,17 +106,18 @@ If a request_id is provided as a direct argument, the tool will save that chat a
 -f, --format        Output format (text, markdown, html, json)
                     (defaults to "text")
 -o, --output        Output directory
-                    (defaults to "./output")
+                    (defaults to "~/repo/cursor_chats")
 -c, --config        Path to configuration file
                     (defaults to "~/.cursor_chat_tool.conf")
 -r, --request-id    Extract chat with specific request ID and save JSON to current directory
 -d, --output-dir    Specific output directory for request-id command
+-p, --output-path   Full output path including filename (without extension)
 
 Examples:
   cursor_chat_tool --list             # List all chats
-  cursor_chat_tool --tui              # Open the TUI browser
+  cursor_chat_tool --tui              # Open TUI browser
   cursor_chat_tool 1234abcd           # Extract chat with ID 1234abcd to current directory
-  cursor_chat_tool --extract=all      # Extract all chats to ./output folder
+  cursor_chat_tool --extract=all      # Extract all chats to ~/repo/cursor_chats folder
   cursor_chat_tool -e=all             # Same as above, using shorthand notation
   cursor_chat_tool -e=all -f markdown # Extract all chats as markdown files
   cursor_chat_tool -e=all -f json -o ./exports  # Extract all chats as JSON to ./exports folder
